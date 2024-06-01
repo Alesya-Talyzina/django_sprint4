@@ -111,8 +111,7 @@ class Comment(PublishedModel):
     author = models.ForeignKey(
         User,
         on_delete=models.CASCADE,
-        verbose_name='Автор',
-        editable=False
+        verbose_name='Автор'
     )
 
     class Meta:
@@ -121,4 +120,4 @@ class Comment(PublishedModel):
         ordering = ('created_at',)
 
     def __str__(self) -> str:
-        return self.text[:constants.RECORDS_LIMIT]
+        return f'Комментарий {self.author} к посту "{self.post}".'

@@ -1,6 +1,7 @@
 from django.contrib.auth.mixins import LoginRequiredMixin
-from django.core.paginator import Paginator
-from django.shortcuts import redirect, get_object_or_404
+from django.db.models import Count
+from django.db.models.query import QuerySet
+from django.shortcuts import redirect, get_object_or_404, render
 from django.utils import timezone
 from django.urls import reverse_lazy
 from django.views.generic import (
@@ -10,7 +11,7 @@ from django.db.models import Count
 
 from .models import Comment, Post, User
 from .forms import PostForm, CommentForm, ProfileForm
-from .constants import PAGINATE_BY
+from .constants import PAGINATE_POST
 
 
 class PostMixin:
@@ -19,21 +20,11 @@ class PostMixin:
     template_name = 'blog/create.html'
     pk_url_kwarg = 'post_id'
 
-    ''' def dispatch(self, request, *args, **kwargs):
-        if self.get_object().author != request.user:
-            return redirect('blog:post_detail', self.kwargs['post_id'])
-        return super().dispatch(request, *args, **kwargs) '''
-
 
 class CommentMixin:
     model = Comment
     template_name = 'blog/comment.html'
     pk_url_kwarg = 'comment_id'
-
-    ''' def dispatch(self, request, *args, **kwargs):
-        if self.get_object().author != request.user:
-            return redirect('blog:post_detail', self.kwargs['post_id'])
-        return super().dispatch(request, *args, **kwargs) '''
 
 
 class IndexListView(ListView):
@@ -41,7 +32,16 @@ class IndexListView(ListView):
 
     model = Post
     template_name = 'blog/index.html'
-    paginate_by = PAGINATE_BY
+    paginate_by = PAGINATE_POST
+
+    def get_queryset(self):
+        return Post.objects.select_related(
+            'location', 'author', 'category'
+        ).filter(
+            pub_date__lte=timezone.now(),
+            is_published=True,
+            category__is_published=True,
+        ).order_by('-pub_date').annotate(comment_count=Count('comment'))
 
 
 class PostDetailView(LoginRequiredMixin, DetailView):
@@ -51,34 +51,12 @@ class PostDetailView(LoginRequiredMixin, DetailView):
     template_name = 'blog/detail.html'
     pk_url_kwarg = 'post_id'
 
-    '''def get_context_data(self, **kwargs):
-        context = super().get_context_data(**kwargs)
-        context['form'] = CommentForm()
-        context['comments'] = (
-            self.object.comments.select_related('author')
-        )
-        return context
-
-    def get_object(self):
-        post = get_object_or_404(Post, pk=self.kwargs['post_id'])
-        if self.request.user == post.author:
-            return post
-        return get_object_or_404(
-            Post, is_published=True, category__is_published=True,
-            pub_date__lt=timezone.now(), pk=self.kwargs['post_id'])'''
-
 
 class CategoryListView(ListView):
     """Страница отделоной категории"""
 
     model = Post
     template_name = 'blog/category.html'
-    paginate_by = PAGINATE_BY
-
-    ''' def get_context_data(self, **kwargs):
-        context = super().get_context_data(**kwargs)
-        context['category'] = self.category
-        return context '''
 
 
 class ProfileListView(ListView):
@@ -86,16 +64,21 @@ class ProfileListView(ListView):
 
     model = Post
     template_name = 'blog/profile.html'
-    paginate_by = PAGINATE_BY
+    paginate_by = PAGINATE_POST
 
-    '''def get_object(self):
-        return get_object_or_404(User, username=self.kwargs['username'])
+    def get_queryset(self):
+        return (
+            self.model.objects.select_related('author')
+            .filter(author__username=self.kwargs['username'])
+            .annotate(comment_count=Count("comment"))
+            .order_by("-pub_date"))
 
     def get_context_data(self, **kwargs):
-        return dict(
-            **super().get_context_data(**kwargs),
-            profile=self.get_object()
-        )'''
+        context = super().get_context_data(**kwargs)
+        context['profile'] = get_object_or_404(
+            User,
+            username=self.kwargs['username'])
+        return context
 
 
 class ProfileUpdateView(LoginRequiredMixin, UpdateView):
@@ -110,13 +93,16 @@ class PostCreateView(LoginRequiredMixin, CreateView):
     """Создание нового поста"""
 
     model = Post
-    form_class = PostForm
     template_name = 'blog/create.html'
-    success_url = reverse_lazy('blog:post_detail')
+    form_class = PostForm
 
-    ''' def form_valid(self, form):
-        form.instance.author = self.request.user
-        return super().form_valid(form) '''
+    def get_success_url(self):
+        username = self.request.user.username
+        success_url = reverse_lazy(
+            'blog:profile',
+            kwargs={'username': username}
+        )
+        return success_url
 
 
 class PostUpdateView(LoginRequiredMixin, PostMixin, UpdateView):
@@ -128,11 +114,6 @@ class PostUpdateView(LoginRequiredMixin, PostMixin, UpdateView):
 class PostDeleteView(LoginRequiredMixin, PostMixin, DeleteView):
     """Удаление поста"""
 
-    ''' def get_context_data(self, **kwargs):
-        context = super().get_context_data(**kwargs)
-        context['form'] = PostForm(instance=self.object)
-        return context '''
-
 
 class CommentCreateView(LoginRequiredMixin, CreateView):
     """Написание коментария"""
@@ -140,10 +121,6 @@ class CommentCreateView(LoginRequiredMixin, CreateView):
     model = Comment
     form_class = CommentForm
     success_url = reverse_lazy('blog:post_detail')
-
-    ''' def form_valid(self, form):
-        form.instance.author = self.request.user
-        return super().form_valid(form) '''
 
 
 class CommentUpdateView(LoginRequiredMixin, CommentMixin, UpdateView):
