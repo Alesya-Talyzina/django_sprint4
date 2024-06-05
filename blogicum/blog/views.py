@@ -1,3 +1,4 @@
+from django.http.response import HttpResponseRedirect
 from django.db.models import Count
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.shortcuts import get_object_or_404, redirect, render
@@ -27,7 +28,6 @@ class PostQuerySet:
 
 
 class CommentMixin:
-    '''Mixin для редактирования и удаления комментария.'''
 
     model = Comment
     form_class = CommentForm
@@ -47,7 +47,6 @@ class CommentMixin:
 
 
 class PostMixin:
-    '''Mixin для редактирования и удаления поста'''
 
     model = Post
     form_class = PostForm
@@ -61,6 +60,8 @@ class PostMixin:
 
 
 class IndexListView(PostQuerySet, ListView):
+    """Главная страница"""
+
     paginate_by = 10
     template_name = 'blog/index.html'
 
@@ -69,7 +70,7 @@ class IndexListView(PostQuerySet, ListView):
 
 
 class PostDetailView(DetailView):
-    '''Страница отдельного поста.'''
+    """Страница отдельного поста"""
 
     model = Post
     template_name = 'blog/detail.html'
@@ -93,11 +94,12 @@ class PostDetailView(DetailView):
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
         context['form'] = CommentForm()
-        context['comment'] = (
+        context['comments'] = (
             self.object.comment.select_related(
                 'author'
             ).order_by('created_at')
         )
+        context['can_edit'] = self.object.author == self.request.user
         return context
 
     def get_success_url(self):
@@ -107,7 +109,7 @@ class PostDetailView(DetailView):
 
 
 class CategoryListView(ListView):
-    '''Страница отдельной категории.'''
+    """Страница отдельной категории."""
 
     template_name = 'blog/category.html'
     category = None
@@ -135,7 +137,7 @@ class CategoryListView(ListView):
 
 
 class ProfileListView(ListView):
-    '''Страница профиля пользователя.'''
+    """Страница профиля пользователя"""
 
     model = User
     template_name = 'blog/profile.html'
@@ -169,7 +171,7 @@ class ProfileListView(ListView):
 
 
 class ProfileUpdateView(LoginRequiredMixin, UpdateView):
-    '''редактирование страницы профиля пользователя.'''
+    """редактирование страницы профиля пользователя"""
 
     model = User
     form_class = ProfileForm
@@ -186,7 +188,7 @@ class ProfileUpdateView(LoginRequiredMixin, UpdateView):
 
 
 class PostCreateView(LoginRequiredMixin, CreateView):
-    '''Страница написания поста.'''
+    """Страница написания поста"""
 
     model = Post
     template_name = 'blog/create.html'
@@ -206,23 +208,44 @@ class PostCreateView(LoginRequiredMixin, CreateView):
 
 
 class PostUpdateView(LoginRequiredMixin, PostMixin, UpdateView):
-    '''Страница изменения поста.'''
+    """Редактирование поста"""
+
+    def test_func(self):
+        return self.get_object().author == self.request.user
+
+    def handle_no_permission(self):
+        post = self.get_object()
+        return HttpResponseRedirect(reverse_lazy('blog:post_detail',
+                                                 args=[post.pk]))
+
+    def get_object(self, queryset=None):
+        return get_object_or_404(self.model, pk=self.kwargs[self.pk_url_kwarg])
 
     def get_success_url(self):
-        return reverse(
-            'blog:post_detail',
-            kwargs={'post_id': self.kwargs['post_id']},
-        )
+        return reverse_lazy('blog:post_detail', args=[self.object.pk])
 
 
 class PostDeleteView(LoginRequiredMixin, PostMixin, DeleteView):
-    '''Страница удаления поста.'''
+    """Удаление поста"""
 
     success_url = reverse_lazy('blog:index')
 
+    def get_success_url(self):
+        return reverse_lazy('blog:profile', args=[self.request.user.username])
+
+    def get_object(self, queryset=None):
+        post_id = self.kwargs.get('post_id')
+        post = get_object_or_404(Post, pk=post_id, author=self.request.user)
+        return post
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        context['form'] = PostForm(instance=context['post'])
+        return context
+
 
 class CommentCreateView(LoginRequiredMixin, CreateView):
-    '''Страница написания комментария.'''
+    """Страница написания комментария"""
 
     model = Comment
     form_class = CommentForm
@@ -231,8 +254,7 @@ class CommentCreateView(LoginRequiredMixin, CreateView):
 
     def get_success_url(self):
         return reverse(
-            'blog:post_detail',
-            kwargs={'post_id': self.kwargs['post_id']},
+            'blog:post_detail', kwargs={'post_id': self.kwargs['post_id']}
         )
 
     def form_valid(self, form):
@@ -242,12 +264,12 @@ class CommentCreateView(LoginRequiredMixin, CreateView):
 
 
 class CommentUpdateView(LoginRequiredMixin, CommentMixin, UpdateView,):
-    '''Страница обновления комментария.'''
+    """Редактирование коментария"""
 
     pass
 
 
 class CommentDeleteView(LoginRequiredMixin, CommentMixin, DeleteView,):
-    """Страница удаления комментария."""
+    """Удаление коментария"""
 
     pass
