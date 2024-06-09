@@ -1,3 +1,4 @@
+from django.db.models import Count
 from django.utils import timezone
 from django.shortcuts import redirect
 from django.urls import reverse
@@ -11,7 +12,7 @@ class PostQuerySetMixin:
     model = Post
 
     def get_queryset(self):
-        return Post.objects.select_related(
+        queryset = Post.objects.select_related(
             'author',
             'location',
             'category'
@@ -20,6 +21,12 @@ class PostQuerySetMixin:
             category__is_published=True,
             pub_date__lte=timezone.now()
         ).order_by('-pub_date')
+        return self.annotate_comment_count(queryset)
+
+    def annotate_comment_count(self, queryset):
+        return queryset.annotate(
+            comment_count=Count('comments')
+        )
 
 
 class CommentMixin:

@@ -40,7 +40,7 @@ class PostAdmin(admin.ModelAdmin):
 
 @admin.register(Comment)
 class CommentAdmin(admin.ModelAdmin):
-    list_display = ['id', 'post', 'author', 'text']
+    list_display = ('id', 'post', 'author', 'text')
 
 
 admin.site.register(Location)

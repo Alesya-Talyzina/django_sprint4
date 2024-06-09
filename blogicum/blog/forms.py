@@ -17,14 +17,11 @@ class PostForm(forms.ModelForm):
 
 
 class CommentForm(forms.ModelForm):
-
-    text = forms.CharField(
-        widget=forms.Textarea(attrs={'cols': 10, 'rows': 4})
-    )
-
+    
     class Meta:
         model = Comment
         fields = ('text',)
+        widgets = {'text': forms.Textarea(attrs={'cols': 10, 'rows': 4})}
 
 
 class ProfileForm(forms.ModelForm):
