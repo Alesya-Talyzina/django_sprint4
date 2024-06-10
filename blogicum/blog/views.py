@@ -102,9 +102,7 @@ class ProfileListView(PostQuerySetMixin, ListView):
                 ).order_by('-pub_date'))
 
         return super().get_queryset().filter(
-            author=self.author,
-            is_published=True,
-            category__is_published=True,
+            author=self.author
         )
 
 
