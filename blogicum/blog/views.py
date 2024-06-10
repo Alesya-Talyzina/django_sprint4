@@ -18,10 +18,6 @@ class IndexListView(PostQuerySetMixin, ListView):
     paginate_by = PAGE_PAGINATOR
     template_name = 'blog/index.html'
 
-    def get_queryset(self):
-        queryset = super().get_queryset()
-        return queryset
-
 
 class PostDetailView(DetailView):
     """Страница отдельного поста"""
@@ -97,7 +93,7 @@ class ProfileListView(PostQuerySetMixin, ListView):
 
     def get_queryset(self):
         self.author = get_object_or_404(User, username=self.kwargs['username'])
-        if self.author.username == self.kwargs['username']:
+        if self.request.user == self.author:
             return self.annotate_comment_count(
                 Post.objects.select_related(
                     'location', 'category', 'author'
@@ -106,7 +102,7 @@ class ProfileListView(PostQuerySetMixin, ListView):
                 ).order_by('-pub_date'))
 
         return super().get_queryset().filter(
-            pub_date__lte=timezone.now(),
+            author=self.author,
             is_published=True,
             category__is_published=True,
         )
